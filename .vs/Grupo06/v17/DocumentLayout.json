@@ -1,12 +1,36 @@
 {
   "Version": 1,
-  "WorkspaceRootPath": "C:\\Users\\Nahuel\\Desktop\\Grupo06\\Grupo06\\",
-  "Documents": [],
+  "WorkspaceRootPath": "C:\\Users\\Nahuel\\Desktop\\Grupo06\\",
+  "Documents": [
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\Nahuel\\Desktop\\Grupo06\\Grupo06\\00_Creacion.sql||{B5A506EB-11BE-4782-9A18-21265C2CA0B4}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:Grupo06\\00_Creacion.sql||{B5A506EB-11BE-4782-9A18-21265C2CA0B4}"
+    }
+  ],
   "DocumentGroupContainers": [
     {
       "Orientation": 0,
       "VerticalTabListWidth": 256,
-      "DocumentGroups": []
+      "DocumentGroups": [
+        {
+          "DockedWidth": 200,
+          "SelectedChildIndex": 0,
+          "Children": [
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "00_Creacion.sql - DESKTOP-VB2NOA2\\SQLEXPRESS.Com2900G06 (DESKTOP-VB2NOA2\\Nahuel (58))",
+              "DocumentMoniker": "C:\\Users\\Nahuel\\Desktop\\Grupo06\\Grupo06\\00_Creacion.sql",
+              "RelativeDocumentMoniker": "Grupo06\\00_Creacion.sql",
+              "ToolTip": "C:\\Users\\Nahuel\\Desktop\\Grupo06\\Grupo06\\00_Creacion.sql - DESKTOP-VB2NOA2\\SQLEXPRESS.Com2900G06 (DESKTOP-VB2NOA2\\Nahuel (58))",
+              "RelativeToolTip": "Grupo06\\00_Creacion.sql - DESKTOP-VB2NOA2\\SQLEXPRESS.Com2900G06 (DESKTOP-VB2NOA2\\Nahuel (58))",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000826|",
+              "WhenOpened": "2025-11-13T17:21:56.262Z",
+              "EditorCaption": " - DESKTOP-VB2NOA2\\SQLEXPRESS.Com2900G06 (DESKTOP-VB2NOA2\\Nahuel (58))"
+            }
+          ]
+        }
+      ]
     }
   ]
 }

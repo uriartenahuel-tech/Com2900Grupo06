@@ -1,5 +1,23 @@
 -- 1 -SCRIPT DE CREACION
 
+--DROP TABLAS
+/*
+DROP TABLE IF EXISTS Tabla.Factura;
+DROP TABLE IF EXISTS Tabla.Pago;
+
+DROP TABLE IF EXISTS Tabla.DetalleExpensa;
+DROP TABLE IF EXISTS Tabla.TipoGasto;
+DROP TABLE IF EXISTS Tabla.TipoServicio;
+
+DROP TABLE IF EXISTS Tabla.Unidad_complementaria;
+DROP TABLE IF EXISTS Tabla.Unidad_Funcional;
+DROP TABLE IF EXISTS Tabla.Expensa;
+
+DROP TABLE IF EXISTS Tabla.Persona;
+DROP TABLE IF EXISTS Tabla.Proveedor;
+DROP TABLE IF EXISTS Tabla.Consorcio;
+*/
+
 IF NOT EXISTS (SELECT * FROM sys.databases WHERE name = 'Com2900G06')
 	BEGIN
 		CREATE DATABASE Com2900G06;
@@ -56,13 +74,14 @@ CREATE TABLE Tabla.Persona (
 	apellido VARCHAR(50),
 	email VARCHAR(50),
 	telefono VARCHAR(20),
-	CVU_CBU INT,
+	CVU_CBU VARCHAR(30),
 	inquilino VARCHAR(50),
 	Fecha_Inicio DATE,
 	Fecha_Fin DATE
 )
 END
 go
+
 /*========================
 =  TABLA: Expensa
 =========================*/
@@ -97,16 +116,17 @@ IF NOT EXISTS (
 BEGIN
     CREATE TABLE Tabla.Unidad_Funcional (
         id                    INT IDENTITY(1,1) PRIMARY KEY,
-        id_Expensa            INT          NULL,         -- según DER
-        Dni_Persona           VARCHAR(10)  NOT NULL,
+        id_Consorcio           INT          NULL,           
+        dni_Persona           VARCHAR(10)  NULL,
+        nro_Unidad_Funcional  INT NULL,
         piso                  VARCHAR(10)  NULL,
         depto                 VARCHAR(10)  NULL,
         porcentaje_prorrateo  DECIMAL(6,3) NULL,
-        Superficie            DECIMAL(10,2) NULL,
-        CONSTRAINT FK_UF_Expensa
-            FOREIGN KEY (id_Expensa)  REFERENCES Tabla.Expensa(id),
+        superficie            DECIMAL(10,2) NULL,
+        CONSTRAINT FK_UF_Consorcio
+            FOREIGN KEY (id_Consorcio)  REFERENCES Tabla.Consorcio(id),
         CONSTRAINT FK_UF_Persona
-            FOREIGN KEY (Dni_Persona) REFERENCES Tabla.Persona(dni)
+            FOREIGN KEY (dni_Persona) REFERENCES Tabla.Persona(dni)
     );
 END
 GO
@@ -120,13 +140,47 @@ IF NOT EXISTS (
 )
 BEGIN
     CREATE TABLE Tabla.Unidad_complementaria (
-        id         INT IDENTITY(1,1) PRIMARY KEY,
-        id_uf      INT           NOT NULL,
-        tipo       VARCHAR(50)   NOT NULL,
-        superficie DECIMAL(10,2) NULL,
+        id                       INT IDENTITY(1,1) PRIMARY KEY,
+        id_uf                    INT           NOT NULL,
+        baulera                  INT           NULL,
+        cochera                  INT           NULL,
+        superficie_baulera       DECIMAL(10,2) NULL,
+        superficie_cochera       DECIMAL(10,2) NULL,
         CONSTRAINT FK_UC_UF
             FOREIGN KEY (id_uf) REFERENCES Tabla.Unidad_Funcional(id)
     );
+END
+GO
+
+/*========================
+=  TABLA: TipoServicio
+=========================*/
+IF NOT EXISTS (
+    SELECT * FROM INFORMATION_SCHEMA.TABLES 
+    WHERE TABLE_SCHEMA = 'Tabla' AND TABLE_NAME = 'TipoServicio'
+)
+BEGIN
+    CREATE TABLE Tabla.TipoServicio (
+        id                      INT IDENTITY(1,1)  PRIMARY KEY,
+        nombre                  VARCHAR(50),
+        descripcion_detalle     VARCHAR(50)
+        );
+END
+GO
+
+/*========================
+=  TABLA: TipoGasto
+=========================*/
+IF NOT EXISTS (
+    SELECT * FROM INFORMATION_SCHEMA.TABLES 
+    WHERE TABLE_SCHEMA = 'Tabla' AND TABLE_NAME = 'TipoGasto'
+)
+BEGIN
+    CREATE TABLE Tabla.TipoGasto (
+        id                      INT IDENTITY(1,1) PRIMARY KEY,
+        nombre                  VARCHAR(50),
+        descripcion_detalle     VARCHAR(50)
+        );
 END
 GO
 
@@ -139,17 +193,23 @@ IF NOT EXISTS (
 )
 BEGIN
     CREATE TABLE Tabla.DetalleExpensa (
-        id                 INT IDENTITY(1,1) PRIMARY KEY,
-        id_expensa         INT          NOT NULL,
-        tipo_gasto         VARCHAR(50)  NULL,
-        tipo_servicio      VARCHAR(50)  NULL,
+        id                  INT IDENTITY(1,1) PRIMARY KEY,
+        id_expensa          INT          NOT NULL,
+        id_tipo_gasto       INT          NOT NULL,
+        id_tipo_servicio    INT          NOT NULL,
+        tipo_gasto          VARCHAR(50)  NULL,
+        tipo_servicio       VARCHAR(50)  NULL,
         descripcion_detalle VARCHAR(200) NULL,
-        periodo_aplicacion VARCHAR(7)   NULL,     -- p.ej. '2025-10'
-        es_cuota           BIT          NULL,
-        nro_cuota_actual   INT          NULL,
-        total_cuotas       INT          NULL,
+        periodo_aplicacion  VARCHAR(7)   NULL,     -- p.ej. '2025-10'
+        es_cuota            BIT          NULL,
+        nro_cuota_actual    INT          NULL,
+        total_cuotas        INT          NULL,
         CONSTRAINT FK_Detalle_Expensa
-            FOREIGN KEY (id_expensa) REFERENCES Tabla.Expensa(id)
+            FOREIGN KEY (id_expensa) REFERENCES Tabla.Expensa(id),
+        CONSTRAINT FK_Tipo_Gasto
+            FOREIGN KEY (id_tipo_gasto) REFERENCES Tabla.TipoGasto(id),
+        CONSTRAINT FK_Tipo_Servicio
+            FOREIGN KEY (id_tipo_servicio) REFERENCES Tabla.TipoServicio(id)
     );
 END
 GO
@@ -165,14 +225,11 @@ BEGIN
     CREATE TABLE Tabla.Pago (
         id         INT IDENTITY(1,1) PRIMARY KEY,
         id_expensa INT          NOT NULL,
-        id_UF      INT          NOT NULL,
         fecha      DATE         NOT NULL,
-        CVU_CBU    INT          NULL,       -- mismo tipo que en Persona para consistencia
+        CVU_CBU    VARCHAR(30)          NULL,  
         importe    DECIMAL(12,2) NOT NULL,
         CONSTRAINT FK_Pago_Expensa
-            FOREIGN KEY (id_expensa) REFERENCES Tabla.Expensa(id),
-        CONSTRAINT FK_Pago_UF
-            FOREIGN KEY (id_UF)      REFERENCES Tabla.Unidad_Funcional(id)
+            FOREIGN KEY (id_expensa) REFERENCES Tabla.Expensa(id)
     );
 END
 GO
@@ -220,7 +277,7 @@ CREATE PROCEDURE Procedimientos.insertarPersona
   @apellido     VARCHAR(50),
   @email        VARCHAR(50),
   @telefono     VARCHAR(20),
-  @CVU_CBU      INT = NULL,
+  @CVU_CBU      VARCHAR(30),
   @inquilino    VARCHAR(50) = NULL,
   @Fecha_Inicio DATE = NULL,
   @Fecha_Fin    DATE = NULL
@@ -252,7 +309,7 @@ CREATE PROCEDURE Procedimientos.modificarPersona
   @apellido     VARCHAR(50),
   @email        VARCHAR(50),
   @telefono     VARCHAR(20),
-  @CVU_CBU      INT = NULL,
+  @CVU_CBU      VARCHAR(30),
   @inquilino    VARCHAR(50) = NULL,
   @Fecha_Inicio DATE = NULL,
   @Fecha_Fin    DATE = NULL
@@ -442,476 +499,804 @@ BEGIN
 END
 GO
 ----------------
- --SP EXPENSA--
+ --SP PAGO--
 ----------------
--- INSERTAR PAGO
-IF EXISTS (SELECT 1 FROM sys.procedures WHERE name='insertarPago' AND SCHEMA_NAME(schema_id)='Procedimientos')
-  DROP PROCEDURE Procedimientos.insertarPago;
+IF EXISTS (SELECT 1 FROM sys.procedures 
+           WHERE name='insertarPago' AND SCHEMA_NAME(schema_id)='Procedimientos')
+    DROP PROCEDURE Procedimientos.insertarPago;
 GO
 CREATE PROCEDURE Procedimientos.insertarPago
-  @id_expensa INT,
-  @id_UF      INT,
-  @fecha      DATE,
-  @CVU_CBU    INT = NULL,
-  @importe    DECIMAL(12,2)
+    @id_expensa INT,
+    @fecha      DATE,
+    @CVU_CBU    VARCHAR(30),
+    @importe    DECIMAL(12,2)
 AS
 BEGIN
-  IF @id_expensa IS NULL OR @id_UF IS NULL OR @fecha IS NULL OR @importe IS NULL
-  BEGIN PRINT 'Error: id_expensa, id_UF, fecha e importe son obligatorios'; RETURN; END;
+    IF @id_expensa IS NULL OR @fecha IS NULL OR @importe IS NULL
+    BEGIN PRINT 'Error: id_expensa, fecha e importe son obligatorios'; RETURN; END;
 
-  IF NOT EXISTS (SELECT 1 FROM Tabla.Expensa WHERE id=@id_expensa)
-  BEGIN PRINT 'Error: Expensa no existe'; RETURN; END;
+    IF NOT EXISTS (SELECT 1 FROM Tabla.Expensa WHERE id=@id_expensa)
+    BEGIN PRINT 'Error: Expensa no existe'; RETURN; END;
 
-  IF NOT EXISTS (SELECT 1 FROM Tabla.Unidad_Funcional WHERE id=@id_UF)
-  BEGIN PRINT 'Error: Unidad_Funcional no existe'; RETURN; END;
+    IF @importe < 0
+    BEGIN PRINT 'Error: importe no puede ser negativo'; RETURN; END;
 
-  IF @importe < 0 BEGIN PRINT 'Error: importe no puede ser negativo'; RETURN; END;
+    INSERT INTO Tabla.Pago (id_expensa,fecha,CVU_CBU,importe)
+    VALUES (@id_expensa,@fecha,@CVU_CBU,@importe);
 
-  INSERT INTO Tabla.Pago(id_expensa,id_UF,fecha,CVU_CBU,importe)
-  VALUES(@id_expensa,@id_UF,@fecha,@CVU_CBU,@importe);
-
-  PRINT 'Pago insertado correctamente';
+    PRINT 'Pago insertado correctamente';
 END
 GO
 
--- MODIFICAR PAGO
-IF EXISTS (SELECT 1 FROM sys.procedures WHERE name='modificarPago' AND SCHEMA_NAME(schema_id)='Procedimientos')
-  DROP PROCEDURE Procedimientos.modificarPago;
+IF EXISTS (SELECT 1 FROM sys.procedures 
+           WHERE name='modificarPago' AND SCHEMA_NAME(schema_id)='Procedimientos')
+    DROP PROCEDURE Procedimientos.modificarPago;
 GO
 CREATE PROCEDURE Procedimientos.modificarPago
-  @id         INT,
-  @id_expensa INT,
-  @id_UF      INT,
-  @fecha      DATE,
-  @CVU_CBU    INT = NULL,
-  @importe    DECIMAL(12,2)
+    @id         INT,
+    @id_expensa INT,
+    @fecha      DATE,
+    @CVU_CBU    VARCHAR(30),
+    @importe    DECIMAL(12,2)
 AS
 BEGIN
-  IF @id IS NULL BEGIN PRINT 'Error: id es obligatorio'; RETURN; END;
-  IF NOT EXISTS (SELECT 1 FROM Tabla.Pago WHERE id=@id)
-  BEGIN PRINT 'Error: Pago no encontrado'; RETURN; END;
+    IF @id IS NULL
+    BEGIN PRINT 'Error: id es obligatorio'; RETURN; END;
 
-  IF NOT EXISTS (SELECT 1 FROM Tabla.Expensa WHERE id=@id_expensa)
-  BEGIN PRINT 'Error: Expensa no existe'; RETURN; END;
+    IF NOT EXISTS (SELECT 1 FROM Tabla.Pago WHERE id=@id)
+    BEGIN PRINT 'Error: Pago no encontrado'; RETURN; END;
 
-  IF NOT EXISTS (SELECT 1 FROM Tabla.Unidad_Funcional WHERE id=@id_UF)
-  BEGIN PRINT 'Error: Unidad_Funcional no existe'; RETURN; END;
+    IF NOT EXISTS (SELECT 1 FROM Tabla.Expensa WHERE id=@id_expensa)
+    BEGIN PRINT 'Error: Expensa no existe'; RETURN; END;
 
-  IF @importe < 0 BEGIN PRINT 'Error: importe no puede ser negativo'; RETURN; END;
+    IF @importe < 0
+    BEGIN PRINT 'Error: importe no puede ser negativo'; RETURN; END;
 
-  UPDATE Tabla.Pago
-  SET id_expensa=@id_expensa, id_UF=@id_UF, fecha=@fecha, CVU_CBU=@CVU_CBU, importe=@importe
-  WHERE id=@id;
+    UPDATE Tabla.Pago
+       SET id_expensa = @id_expensa,
+           fecha      = @fecha,
+           CVU_CBU    = @CVU_CBU,
+           importe    = @importe
+     WHERE id=@id;
 
-  PRINT 'Pago modificado correctamente';
+    PRINT 'Pago modificado correctamente';
 END
 GO
 
--- ELIMINAR PAGO
-IF EXISTS (SELECT 1 FROM sys.procedures WHERE name='eliminarPago' AND SCHEMA_NAME(schema_id)='Procedimientos')
-  DROP PROCEDURE Procedimientos.eliminarPago;
+IF EXISTS (SELECT 1 FROM sys.procedures 
+           WHERE name='eliminarPago' AND SCHEMA_NAME(schema_id)='Procedimientos')
+    DROP PROCEDURE Procedimientos.eliminarPago;
 GO
 CREATE PROCEDURE Procedimientos.eliminarPago
-  @id INT
+    @id INT
 AS
 BEGIN
-  IF @id IS NULL BEGIN PRINT 'Error: id es obligatorio'; RETURN; END;
-  IF NOT EXISTS (SELECT 1 FROM Tabla.Pago WHERE id=@id)
-  BEGIN PRINT 'Error: Pago no encontrado'; RETURN; END;
+    IF @id IS NULL
+    BEGIN PRINT 'Error: id es obligatorio'; RETURN; END;
 
-  DELETE FROM Tabla.Pago WHERE id=@id;
+    IF NOT EXISTS (SELECT 1 FROM Tabla.Pago WHERE id=@id)
+    BEGIN PRINT 'Error: Pago no encontrado'; RETURN; END;
 
-  PRINT 'Pago eliminado correctamente';
+    DELETE FROM Tabla.Pago WHERE id=@id;
+
+    PRINT 'Pago eliminado correctamente';
 END
-GO
-----------------
+GO----------------
 --SP CONSORCIO--
 ----------------
---INSERTAR CONSORCIO
-IF EXISTS (SELECT 1 FROM sys.procedures WHERE name='insertarConsorcio' AND SCHEMA_NAME(schema_id)='Procedimientos')
-  DROP PROCEDURE Procedimientos.insertarConsorcio;
+IF EXISTS (SELECT 1 FROM sys.procedures 
+           WHERE name='insertarConsorcio' AND SCHEMA_NAME(schema_id)='Procedimientos')
+    DROP PROCEDURE Procedimientos.insertarConsorcio;
 GO
 CREATE PROCEDURE Procedimientos.insertarConsorcio
-  @nombre             VARCHAR(50),
-  @direccion          VARCHAR(100)=NULL,
-  @cuit_administracion INT = NULL,
-  @cuenta_bancaria     INT = NULL,
-  @opcion_limpieza     TINYINT = NULL
+    @nombre             VARCHAR(50),
+    @direccion          VARCHAR(100) = NULL,
+    @cuit_administracion INT        = NULL,
+    @cuenta_bancaria     INT        = NULL,
+    @opcion_limpieza     TINYINT    = NULL
 AS
 BEGIN
-  IF @nombre IS NULL BEGIN PRINT 'Error: nombre es obligatorio'; RETURN; END;
-  IF @opcion_limpieza IS NOT NULL AND @opcion_limpieza NOT IN (0,1)
-  BEGIN PRINT 'Error: opcion_limpieza debe ser 0 o 1'; RETURN; END;
+    IF @nombre IS NULL
+    BEGIN PRINT 'Error: nombre es obligatorio'; RETURN; END;
 
-  INSERT INTO Tabla.Consorcio(nombre,direccion,cuit_administracion,cuenta_bancaria,opcion_limpieza)
-  VALUES(@nombre,@direccion,@cuit_administracion,@cuenta_bancaria,@opcion_limpieza);
+    IF @opcion_limpieza IS NOT NULL AND @opcion_limpieza NOT IN (0,1)
+    BEGIN PRINT 'Error: opcion_limpieza debe ser 0 o 1'; RETURN; END;
 
-  PRINT 'Consorcio insertado correctamente';
+    INSERT INTO Tabla.Consorcio (nombre,direccion,cuit_administracion,cuenta_bancaria,opcion_limpieza)
+    VALUES (@nombre,@direccion,@cuit_administracion,@cuenta_bancaria,@opcion_limpieza);
+
+    PRINT 'Consorcio insertado correctamente';
 END
 GO
---MODIFICAR CONSORCIO
-IF EXISTS (SELECT 1 FROM sys.procedures WHERE name='modificarConsorcio' AND SCHEMA_NAME(schema_id)='Procedimientos')
-  DROP PROCEDURE Procedimientos.modificarConsorcio;
+
+IF EXISTS (SELECT 1 FROM sys.procedures 
+           WHERE name='modificarConsorcio' AND SCHEMA_NAME(schema_id)='Procedimientos')
+    DROP PROCEDURE Procedimientos.modificarConsorcio;
 GO
 CREATE PROCEDURE Procedimientos.modificarConsorcio
-  @id                 INT,
-  @nombre             VARCHAR(50),
-  @direccion          VARCHAR(100)=NULL,
-  @cuit_administracion INT = NULL,
-  @cuenta_bancaria     INT = NULL,
-  @opcion_limpieza     TINYINT = NULL
+    @id                 INT,
+    @nombre             VARCHAR(50),
+    @direccion          VARCHAR(100) = NULL,
+    @cuit_administracion INT        = NULL,
+    @cuenta_bancaria     INT        = NULL,
+    @opcion_limpieza     TINYINT    = NULL
 AS
 BEGIN
-  IF @id IS NULL BEGIN PRINT 'Error: id es obligatorio'; RETURN; END;
-  IF NOT EXISTS (SELECT 1 FROM Tabla.Consorcio WHERE id=@id)
-  BEGIN PRINT 'Error: Consorcio no encontrado'; RETURN; END;
-  IF @opcion_limpieza IS NOT NULL AND @opcion_limpieza NOT IN (0,1)
-  BEGIN PRINT 'Error: opcion_limpieza debe ser 0 o 1'; RETURN; END;
+    IF @id IS NULL
+    BEGIN PRINT 'Error: id es obligatorio'; RETURN; END;
 
-  UPDATE Tabla.Consorcio
-  SET nombre=@nombre, direccion=@direccion, cuit_administracion=@cuit_administracion,
-      cuenta_bancaria=@cuenta_bancaria, opcion_limpieza=@opcion_limpieza
-  WHERE id=@id;
+    IF NOT EXISTS (SELECT 1 FROM Tabla.Consorcio WHERE id=@id)
+    BEGIN PRINT 'Error: Consorcio no encontrado'; RETURN; END;
 
-  PRINT 'Consorcio modificado correctamente';
+    IF @opcion_limpieza IS NOT NULL AND @opcion_limpieza NOT IN (0,1)
+    BEGIN PRINT 'Error: opcion_limpieza debe ser 0 o 1'; RETURN; END;
+
+    UPDATE Tabla.Consorcio
+       SET nombre=@nombre,
+           direccion=@direccion,
+           cuit_administracion=@cuit_administracion,
+           cuenta_bancaria=@cuenta_bancaria,
+           opcion_limpieza=@opcion_limpieza
+     WHERE id=@id;
+
+    PRINT 'Consorcio modificado correctamente';
 END
 GO
---ELIMINAR CONSORCIO
-IF EXISTS (SELECT 1 FROM sys.procedures WHERE name='eliminarConsorcio' AND SCHEMA_NAME(schema_id)='Procedimientos')
-  DROP PROCEDURE Procedimientos.eliminarConsorcio;
+
+IF EXISTS (SELECT 1 FROM sys.procedures 
+           WHERE name='eliminarConsorcio' AND SCHEMA_NAME(schema_id)='Procedimientos')
+    DROP PROCEDURE Procedimientos.eliminarConsorcio;
 GO
 CREATE PROCEDURE Procedimientos.eliminarConsorcio
-  @id INT
+    @id INT
 AS
 BEGIN
-  IF @id IS NULL BEGIN PRINT 'Error: id es obligatorio'; RETURN; END;
-  IF NOT EXISTS (SELECT 1 FROM Tabla.Consorcio WHERE id=@id)
-  BEGIN PRINT 'Error: Consorcio no encontrado'; RETURN; END;
+    IF @id IS NULL
+    BEGIN PRINT 'Error: id es obligatorio'; RETURN; END;
 
-  DELETE FROM Tabla.Consorcio WHERE id=@id;
-  PRINT 'Consorcio eliminado correctamente';
+    IF NOT EXISTS (SELECT 1 FROM Tabla.Consorcio WHERE id=@id)
+    BEGIN PRINT 'Error: Consorcio no encontrado'; RETURN; END;
+
+    DELETE FROM Tabla.Consorcio WHERE id=@id;
+
+    PRINT 'Consorcio eliminado correctamente';
 END
 GO
 
 -----------------------
 --SP UNIDAD FUNCIONAL--
 -----------------------
---INSERTAR UNIDAD FUNCIONAL
-IF EXISTS (SELECT 1 FROM sys.procedures WHERE name='insertarUnidadFuncional' AND SCHEMA_NAME(schema_id)='Procedimientos')
-  DROP PROCEDURE Procedimientos.insertarUnidadFuncional;
+IF EXISTS (SELECT 1 FROM sys.procedures 
+           WHERE name='insertarUnidadFuncional' AND SCHEMA_NAME(schema_id)='Procedimientos')
+    DROP PROCEDURE Procedimientos.insertarUnidadFuncional;
 GO
 CREATE PROCEDURE Procedimientos.insertarUnidadFuncional
-  @id_Expensa           INT = NULL,
-  @Dni_Persona          VARCHAR(10),
-  @piso                 VARCHAR(10)=NULL,
-  @depto                VARCHAR(10)=NULL,
-  @porcentaje_prorrateo DECIMAL(6,3)=NULL,
-  @Superficie           DECIMAL(10,2)=NULL
+    @id_Consorcio          INT          = NULL,
+    @dni_Persona           VARCHAR(10),
+    @nro_Unidad_Funcional  INT          = NULL,
+    @piso                  VARCHAR(10)  = NULL,
+    @depto                 VARCHAR(10)  = NULL,
+    @porcentaje_prorrateo  DECIMAL(6,3) = NULL,
+    @superficie            DECIMAL(10,2)= NULL
 AS
 BEGIN
-  IF @Dni_Persona IS NULL BEGIN PRINT 'Error: Dni_Persona es obligatorio'; RETURN; END;
-  IF NOT EXISTS (SELECT 1 FROM Tabla.Persona WHERE dni=@Dni_Persona)
-  BEGIN PRINT 'Error: Persona no existe'; RETURN; END;
-  IF @id_Expensa IS NOT NULL AND NOT EXISTS (SELECT 1 FROM Tabla.Expensa WHERE id=@id_Expensa)
-  BEGIN PRINT 'Error: Expensa no existe'; RETURN; END;
+    IF @dni_Persona IS NULL
+    BEGIN PRINT 'Error: dni_Persona es obligatorio'; RETURN; END;
 
-  INSERT INTO Tabla.Unidad_Funcional(id_Expensa,Dni_Persona,piso,depto,porcentaje_prorrateo,Superficie)
-  VALUES(@id_Expensa,@Dni_Persona,@piso,@depto,@porcentaje_prorrateo,@Superficie);
+    IF NOT EXISTS (SELECT 1 FROM Tabla.Persona WHERE dni=@dni_Persona)
+    BEGIN PRINT 'Error: Persona no existe'; RETURN; END;
 
-  PRINT 'Unidad_Funcional insertada correctamente';
+    IF @id_Consorcio IS NOT NULL 
+       AND NOT EXISTS (SELECT 1 FROM Tabla.Consorcio WHERE id=@id_Consorcio)
+    BEGIN PRINT 'Error: Consorcio no existe'; RETURN; END;
+
+    INSERT INTO Tabla.Unidad_Funcional
+        (id_Consorcio,dni_Persona,nro_Unidad_Funcional,piso,depto,porcentaje_prorrateo,superficie)
+    VALUES
+        (@id_Consorcio,@dni_Persona,@nro_Unidad_Funcional,@piso,@depto,@porcentaje_prorrateo,@superficie);
+
+    PRINT 'Unidad_Funcional insertada correctamente';
 END
 GO
---MODIFICAR UNIDAD FUNCIONAL
-IF EXISTS (SELECT 1 FROM sys.procedures WHERE name='modificarUnidadFuncional' AND SCHEMA_NAME(schema_id)='Procedimientos')
-  DROP PROCEDURE Procedimientos.modificarUnidadFuncional;
+
+IF EXISTS (SELECT 1 FROM sys.procedures 
+           WHERE name='modificarUnidadFuncional' AND SCHEMA_NAME(schema_id)='Procedimientos')
+    DROP PROCEDURE Procedimientos.modificarUnidadFuncional;
 GO
 CREATE PROCEDURE Procedimientos.modificarUnidadFuncional
-  @id                  INT,
-  @id_Expensa          INT = NULL,
-  @Dni_Persona         VARCHAR(10),
-  @piso                VARCHAR(10)=NULL,
-  @depto               VARCHAR(10)=NULL,
-  @porcentaje_prorrateo DECIMAL(6,3)=NULL,
-  @Superficie          DECIMAL(10,2)=NULL
+    @id                    INT,
+    @id_Consorcio          INT          = NULL,
+    @dni_Persona           VARCHAR(10),
+    @nro_Unidad_Funcional  INT          = NULL,
+    @piso                  VARCHAR(10)  = NULL,
+    @depto                 VARCHAR(10)  = NULL,
+    @porcentaje_prorrateo  DECIMAL(6,3) = NULL,
+    @superficie            DECIMAL(10,2)= NULL
 AS
 BEGIN
-  IF @id IS NULL BEGIN PRINT 'Error: id es obligatorio'; RETURN; END;
-  IF NOT EXISTS (SELECT 1 FROM Tabla.Unidad_Funcional WHERE id=@id)
-  BEGIN PRINT 'Error: Unidad_Funcional no encontrada'; RETURN; END;
-  IF NOT EXISTS (SELECT 1 FROM Tabla.Persona WHERE dni=@Dni_Persona)
-  BEGIN PRINT 'Error: Persona no existe'; RETURN; END;
-  IF @id_Expensa IS NOT NULL AND NOT EXISTS (SELECT 1 FROM Tabla.Expensa WHERE id=@id_Expensa)
-  BEGIN PRINT 'Error: Expensa no existe'; RETURN; END;
+    IF @id IS NULL
+    BEGIN PRINT 'Error: id es obligatorio'; RETURN; END;
 
-  UPDATE Tabla.Unidad_Funcional
-    SET id_Expensa=@id_Expensa, Dni_Persona=@Dni_Persona, piso=@piso, depto=@depto,
-        porcentaje_prorrateo=@porcentaje_prorrateo, Superficie=@Superficie
-  WHERE id=@id;
+    IF NOT EXISTS (SELECT 1 FROM Tabla.Unidad_Funcional WHERE id=@id)
+    BEGIN PRINT 'Error: Unidad_Funcional no encontrada'; RETURN; END;
 
-  PRINT 'Unidad_Funcional modificada correctamente';
+    IF NOT EXISTS (SELECT 1 FROM Tabla.Persona WHERE dni=@dni_Persona)
+    BEGIN PRINT 'Error: Persona no existe'; RETURN; END;
+
+    IF @id_Consorcio IS NOT NULL 
+       AND NOT EXISTS (SELECT 1 FROM Tabla.Consorcio WHERE id=@id_Consorcio)
+    BEGIN PRINT 'Error: Consorcio no existe'; RETURN; END;
+
+    UPDATE Tabla.Unidad_Funcional
+       SET id_Consorcio         = @id_Consorcio,
+           dni_Persona          = @dni_Persona,
+           nro_Unidad_Funcional = @nro_Unidad_Funcional,
+           piso                 = @piso,
+           depto                = @depto,
+           porcentaje_prorrateo = @porcentaje_prorrateo,
+           superficie           = @superficie
+     WHERE id=@id;
+
+    PRINT 'Unidad_Funcional modificada correctamente';
 END
 GO
---ELIMINAR UNIDAD FUNCIONAL
-IF EXISTS (SELECT 1 FROM sys.procedures WHERE name='eliminarUnidadFuncional' AND SCHEMA_NAME(schema_id)='Procedimientos')
-  DROP PROCEDURE Procedimientos.eliminarUnidadFuncional;
+
+IF EXISTS (SELECT 1 FROM sys.procedures 
+           WHERE name='eliminarUnidadFuncional' AND SCHEMA_NAME(schema_id)='Procedimientos')
+    DROP PROCEDURE Procedimientos.eliminarUnidadFuncional;
 GO
 CREATE PROCEDURE Procedimientos.eliminarUnidadFuncional
-  @id INT
+    @id INT
 AS
 BEGIN
-  IF @id IS NULL BEGIN PRINT 'Error: id es obligatorio'; RETURN; END;
-  IF NOT EXISTS (SELECT 1 FROM Tabla.Unidad_Funcional WHERE id=@id)
-  BEGIN PRINT 'Error: Unidad_Funcional no encontrada'; RETURN; END;
+    IF @id IS NULL
+    BEGIN PRINT 'Error: id es obligatorio'; RETURN; END;
 
-  DELETE FROM Tabla.Unidad_Funcional WHERE id=@id;
-  PRINT 'Unidad_Funcional eliminada correctamente';
+    IF NOT EXISTS (SELECT 1 FROM Tabla.Unidad_Funcional WHERE id=@id)
+    BEGIN PRINT 'Error: Unidad_Funcional no encontrada'; RETURN; END;
+
+    DELETE FROM Tabla.Unidad_Funcional WHERE id=@id;
+
+    PRINT 'Unidad_Funcional eliminada correctamente';
 END
 GO
 
 ----------------------------
 --SP UNIDAD COMPLEMENTARIA--
 ----------------------------
---INSERTAR UNIDAD COMPLEMENTARIA
-IF EXISTS (SELECT 1 FROM sys.procedures WHERE name='insertarUnidadComplementaria' AND SCHEMA_NAME(schema_id)='Procedimientos')
-  DROP PROCEDURE Procedimientos.insertarUnidadComplementaria;
+IF EXISTS (SELECT 1 FROM sys.procedures 
+           WHERE name='insertarUnidadComplementaria' AND SCHEMA_NAME(schema_id)='Procedimientos')
+    DROP PROCEDURE Procedimientos.insertarUnidadComplementaria;
 GO
 CREATE PROCEDURE Procedimientos.insertarUnidadComplementaria
-  @id_uf      INT,
-  @tipo       VARCHAR(50),
-  @superficie DECIMAL(10,2)=NULL
+    @id_uf              INT,
+    @baulera            INT           = NULL,
+    @cochera            INT           = NULL,
+    @superficie_baulera DECIMAL(10,2) = NULL,
+    @superficie_cochera DECIMAL(10,2) = NULL
 AS
 BEGIN
-  IF @id_uf IS NULL OR @tipo IS NULL
-  BEGIN PRINT 'Error: id_uf y tipo son obligatorios'; RETURN; END;
-  IF NOT EXISTS (SELECT 1 FROM Tabla.Unidad_Funcional WHERE id=@id_uf)
-  BEGIN PRINT 'Error: Unidad_Funcional no existe'; RETURN; END;
+    IF @id_uf IS NULL
+    BEGIN PRINT 'Error: id_uf es obligatorio'; RETURN; END;
 
-  INSERT INTO Tabla.Unidad_complementaria(id_uf,tipo,superficie)
-  VALUES(@id_uf,@tipo,@superficie);
+    IF NOT EXISTS (SELECT 1 FROM Tabla.Unidad_Funcional WHERE id=@id_uf)
+    BEGIN PRINT 'Error: Unidad_Funcional no existe'; RETURN; END;
 
-  PRINT 'Unidad_complementaria insertada correctamente';
+    INSERT INTO Tabla.Unidad_complementaria
+        (id_uf,baulera,cochera,superficie_baulera,superficie_cochera)
+    VALUES
+        (@id_uf,@baulera,@cochera,@superficie_baulera,@superficie_cochera);
+
+    PRINT 'Unidad_complementaria insertada correctamente';
 END
 GO
---MODIFICAR UNIDAD COMPLEMENTARIA
-IF EXISTS (SELECT 1 FROM sys.procedures WHERE name='modificarUnidadComplementaria' AND SCHEMA_NAME(schema_id)='Procedimientos')
-  DROP PROCEDURE Procedimientos.modificarUnidadComplementaria;
+
+IF EXISTS (SELECT 1 FROM sys.procedures 
+           WHERE name='modificarUnidadComplementaria' AND SCHEMA_NAME(schema_id)='Procedimientos')
+    DROP PROCEDURE Procedimientos.modificarUnidadComplementaria;
 GO
 CREATE PROCEDURE Procedimientos.modificarUnidadComplementaria
-  @id         INT,
-  @id_uf      INT,
-  @tipo       VARCHAR(50),
-  @superficie DECIMAL(10,2)=NULL
+    @id                 INT,
+    @id_uf              INT,
+    @baulera            INT           = NULL,
+    @cochera            INT           = NULL,
+    @superficie_baulera DECIMAL(10,2) = NULL,
+    @superficie_cochera DECIMAL(10,2) = NULL
 AS
 BEGIN
-  IF @id IS NULL BEGIN PRINT 'Error: id es obligatorio'; RETURN; END;
-  IF NOT EXISTS (SELECT 1 FROM Tabla.Unidad_complementaria WHERE id=@id)
-  BEGIN PRINT 'Error: Unidad_complementaria no encontrada'; RETURN; END;
-  IF NOT EXISTS (SELECT 1 FROM Tabla.Unidad_Funcional WHERE id=@id_uf)
-  BEGIN PRINT 'Error: Unidad_Funcional no existe'; RETURN; END;
+    IF @id IS NULL
+    BEGIN PRINT 'Error: id es obligatorio'; RETURN; END;
 
-  UPDATE Tabla.Unidad_complementaria
-  SET id_uf=@id_uf, tipo=@tipo, superficie=@superficie
-  WHERE id=@id;
+    IF NOT EXISTS (SELECT 1 FROM Tabla.Unidad_complementaria WHERE id=@id)
+    BEGIN PRINT 'Error: Unidad_complementaria no encontrada'; RETURN; END;
 
-  PRINT 'Unidad_complementaria modificada correctamente';
+    IF NOT EXISTS (SELECT 1 FROM Tabla.Unidad_Funcional WHERE id=@id_uf)
+    BEGIN PRINT 'Error: Unidad_Funcional no existe'; RETURN; END;
+
+    UPDATE Tabla.Unidad_complementaria
+       SET id_uf              = @id_uf,
+           baulera            = @baulera,
+           cochera            = @cochera,
+           superficie_baulera = @superficie_baulera,
+           superficie_cochera = @superficie_cochera
+     WHERE id=@id;
+
+    PRINT 'Unidad_complementaria modificada correctamente';
 END
 GO
---ELIMINAR UNIDAD COMPLEMENTARIA
-IF EXISTS (SELECT 1 FROM sys.procedures WHERE name='eliminarUnidadComplementaria' AND SCHEMA_NAME(schema_id)='Procedimientos')
-  DROP PROCEDURE Procedimientos.eliminarUnidadComplementaria;
+
+IF EXISTS (SELECT 1 FROM sys.procedures 
+           WHERE name='eliminarUnidadComplementaria' AND SCHEMA_NAME(schema_id)='Procedimientos')
+    DROP PROCEDURE Procedimientos.eliminarUnidadComplementaria;
 GO
 CREATE PROCEDURE Procedimientos.eliminarUnidadComplementaria
-  @id INT
+    @id INT
 AS
 BEGIN
-  IF @id IS NULL BEGIN PRINT 'Error: id es obligatorio'; RETURN; END;
-  IF NOT EXISTS (SELECT 1 FROM Tabla.Unidad_complementaria WHERE id=@id)
-  BEGIN PRINT 'Error: Unidad_complementaria no encontrada'; RETURN; END;
+    IF @id IS NULL
+    BEGIN PRINT 'Error: id es obligatorio'; RETURN; END;
 
-  DELETE FROM Tabla.Unidad_complementaria WHERE id=@id;
-  PRINT 'Unidad_complementaria eliminada correctamente';
+    IF NOT EXISTS (SELECT 1 FROM Tabla.Unidad_complementaria WHERE id=@id)
+    BEGIN PRINT 'Error: Unidad_complementaria no encontrada'; RETURN; END;
+
+    DELETE FROM Tabla.Unidad_complementaria WHERE id=@id;
+
+    PRINT 'Unidad_complementaria eliminada correctamente';
 END
 GO
 
 ----------------------
 --SP DETALLE EXPENSA--
 ----------------------
---INSERTAR DETALLE EXPENSA
-IF EXISTS (SELECT 1 FROM sys.procedures WHERE name='insertarDetalleExpensa' AND SCHEMA_NAME(schema_id)='Procedimientos')
-  DROP PROCEDURE Procedimientos.insertarDetalleExpensa;
+IF EXISTS (SELECT 1 FROM sys.procedures 
+           WHERE name='insertarDetalleExpensa' AND SCHEMA_NAME(schema_id)='Procedimientos')
+    DROP PROCEDURE Procedimientos.insertarDetalleExpensa;
 GO
 CREATE PROCEDURE Procedimientos.insertarDetalleExpensa
-  @id_expensa          INT,
-  @tipo_gasto          VARCHAR(50)=NULL,
-  @tipo_servicio       VARCHAR(50)=NULL,
-  @descripcion_detalle VARCHAR(200)=NULL,
-  @periodo_aplicacion  VARCHAR(7)=NULL,
-  @es_cuota            BIT = NULL,
-  @nro_cuota_actual    INT = NULL,
-  @total_cuotas        INT = NULL
+    @id_expensa          INT,
+    @id_tipo_gasto       INT,
+    @id_tipo_servicio    INT,
+    @tipo_gasto          VARCHAR(50)  = NULL,
+    @tipo_servicio       VARCHAR(50)  = NULL,
+    @descripcion_detalle VARCHAR(200) = NULL,
+    @periodo_aplicacion  VARCHAR(7)   = NULL,
+    @es_cuota            BIT          = NULL,
+    @nro_cuota_actual    INT          = NULL,
+    @total_cuotas        INT          = NULL
 AS
 BEGIN
-  IF @id_expensa IS NULL BEGIN PRINT 'Error: id_expensa es obligatorio'; RETURN; END;
-  IF NOT EXISTS (SELECT 1 FROM Tabla.Expensa WHERE id=@id_expensa)
-  BEGIN PRINT 'Error: Expensa no existe'; RETURN; END;
+    IF @id_expensa IS NULL OR @id_tipo_gasto IS NULL OR @id_tipo_servicio IS NULL
+    BEGIN PRINT 'Error: id_expensa, id_tipo_gasto e id_tipo_servicio son obligatorios'; RETURN; END;
 
-  IF ISNULL(@es_cuota,0)=1
-  BEGIN
-    IF @total_cuotas IS NULL OR @total_cuotas <= 0
-      BEGIN PRINT 'Error: total_cuotas debe ser > 0 cuando es_cuota=1'; RETURN; END;
-    IF @nro_cuota_actual IS NULL OR @nro_cuota_actual NOT BETWEEN 1 AND @total_cuotas
-      BEGIN PRINT 'Error: nro_cuota_actual debe estar entre 1 y total_cuotas'; RETURN; END;
-  END
+    IF NOT EXISTS (SELECT 1 FROM Tabla.Expensa WHERE id=@id_expensa)
+    BEGIN PRINT 'Error: Expensa no existe'; RETURN; END;
 
-  INSERT INTO Tabla.DetalleExpensa(id_expensa,tipo_gasto,tipo_servicio,descripcion_detalle,
-                                   periodo_aplicacion,es_cuota,nro_cuota_actual,total_cuotas)
-  VALUES(@id_expensa,@tipo_gasto,@tipo_servicio,@descripcion_detalle,
-         @periodo_aplicacion,@es_cuota,@nro_cuota_actual,@total_cuotas);
+    IF NOT EXISTS (SELECT 1 FROM Tabla.TipoGasto WHERE id=@id_tipo_gasto)
+    BEGIN PRINT 'Error: TipoGasto no existe'; RETURN; END;
 
-  PRINT 'DetalleExpensa insertado correctamente';
+    IF NOT EXISTS (SELECT 1 FROM Tabla.TipoServicio WHERE id=@id_tipo_servicio)
+    BEGIN PRINT 'Error: TipoServicio no existe'; RETURN; END;
+
+    IF ISNULL(@es_cuota,0)=1
+    BEGIN
+        IF @total_cuotas IS NULL OR @total_cuotas <= 0
+        BEGIN PRINT 'Error: total_cuotas debe ser > 0 cuando es_cuota=1'; RETURN; END;
+
+        IF @nro_cuota_actual IS NULL OR @nro_cuota_actual NOT BETWEEN 1 AND @total_cuotas
+        BEGIN PRINT 'Error: nro_cuota_actual debe estar entre 1 y total_cuotas'; RETURN; END;
+    END
+
+    INSERT INTO Tabla.DetalleExpensa
+        (id_expensa,id_tipo_gasto,id_tipo_servicio,tipo_gasto,tipo_servicio,
+         descripcion_detalle,periodo_aplicacion,es_cuota,nro_cuota_actual,total_cuotas)
+    VALUES
+        (@id_expensa,@id_tipo_gasto,@id_tipo_servicio,@tipo_gasto,@tipo_servicio,
+         @descripcion_detalle,@periodo_aplicacion,@es_cuota,@nro_cuota_actual,@total_cuotas);
+
+    PRINT 'DetalleExpensa insertado correctamente';
 END
 GO
---MODIFICAR DETALLE EXPENSA
-IF EXISTS (SELECT 1 FROM sys.procedures WHERE name='modificarDetalleExpensa' AND SCHEMA_NAME(schema_id)='Procedimientos')
-  DROP PROCEDURE Procedimientos.modificarDetalleExpensa;
+
+IF EXISTS (SELECT 1 FROM sys.procedures 
+           WHERE name='modificarDetalleExpensa' AND SCHEMA_NAME(schema_id)='Procedimientos')
+    DROP PROCEDURE Procedimientos.modificarDetalleExpensa;
 GO
 CREATE PROCEDURE Procedimientos.modificarDetalleExpensa
-  @id                  INT,
-  @id_expensa          INT,
-  @tipo_gasto          VARCHAR(50)=NULL,
-  @tipo_servicio       VARCHAR(50)=NULL,
-  @descripcion_detalle VARCHAR(200)=NULL,
-  @periodo_aplicacion  VARCHAR(7)=NULL,
-  @es_cuota            BIT = NULL,
-  @nro_cuota_actual    INT = NULL,
-  @total_cuotas        INT = NULL
+    @id                  INT,
+    @id_expensa          INT,
+    @id_tipo_gasto       INT,
+    @id_tipo_servicio    INT,
+    @tipo_gasto          VARCHAR(50)  = NULL,
+    @tipo_servicio       VARCHAR(50)  = NULL,
+    @descripcion_detalle VARCHAR(200) = NULL,
+    @periodo_aplicacion  VARCHAR(7)   = NULL,
+    @es_cuota            BIT          = NULL,
+    @nro_cuota_actual    INT          = NULL,
+    @total_cuotas        INT          = NULL
 AS
 BEGIN
-  IF @id IS NULL BEGIN PRINT 'Error: id es obligatorio'; RETURN; END;
-  IF NOT EXISTS (SELECT 1 FROM Tabla.DetalleExpensa WHERE id=@id)
-  BEGIN PRINT 'Error: DetalleExpensa no encontrado'; RETURN; END;
-  IF NOT EXISTS (SELECT 1 FROM Tabla.Expensa WHERE id=@id_expensa)
-  BEGIN PRINT 'Error: Expensa no existe'; RETURN; END;
+    IF @id IS NULL
+    BEGIN PRINT 'Error: id es obligatorio'; RETURN; END;
 
-  IF ISNULL(@es_cuota,0)=1
-  BEGIN
-    IF @total_cuotas IS NULL OR @total_cuotas <= 0
-      BEGIN PRINT 'Error: total_cuotas debe ser > 0 cuando es_cuota=1'; RETURN; END;
-    IF @nro_cuota_actual IS NULL OR @nro_cuota_actual NOT BETWEEN 1 AND @total_cuotas
-      BEGIN PRINT 'Error: nro_cuota_actual debe estar entre 1 y total_cuotas'; RETURN; END;
-  END
+    IF NOT EXISTS (SELECT 1 FROM Tabla.DetalleExpensa WHERE id=@id)
+    BEGIN PRINT 'Error: DetalleExpensa no encontrado'; RETURN; END;
 
-  UPDATE Tabla.DetalleExpensa
-  SET id_expensa=@id_expensa, tipo_gasto=@tipo_gasto, tipo_servicio=@tipo_servicio,
-      descripcion_detalle=@descripcion_detalle, periodo_aplicacion=@periodo_aplicacion,
-      es_cuota=@es_cuota, nro_cuota_actual=@nro_cuota_actual, total_cuotas=@total_cuotas
-  WHERE id=@id;
+    IF NOT EXISTS (SELECT 1 FROM Tabla.Expensa WHERE id=@id_expensa)
+    BEGIN PRINT 'Error: Expensa no existe'; RETURN; END;
 
-  PRINT 'DetalleExpensa modificado correctamente';
+    IF NOT EXISTS (SELECT 1 FROM Tabla.TipoGasto WHERE id=@id_tipo_gasto)
+    BEGIN PRINT 'Error: TipoGasto no existe'; RETURN; END;
+
+    IF NOT EXISTS (SELECT 1 FROM Tabla.TipoServicio WHERE id=@id_tipo_servicio)
+    BEGIN PRINT 'Error: TipoServicio no existe'; RETURN; END;
+
+    IF ISNULL(@es_cuota,0)=1
+    BEGIN
+        IF @total_cuotas IS NULL OR @total_cuotas <= 0
+        BEGIN PRINT 'Error: total_cuotas debe ser > 0 cuando es_cuota=1'; RETURN; END;
+
+        IF @nro_cuota_actual IS NULL OR @nro_cuota_actual NOT BETWEEN 1 AND @total_cuotas
+        BEGIN PRINT 'Error: nro_cuota_actual debe estar entre 1 y total_cuotas'; RETURN; END;
+    END
+
+    UPDATE Tabla.DetalleExpensa
+       SET id_expensa          = @id_expensa,
+           id_tipo_gasto       = @id_tipo_gasto,
+           id_tipo_servicio    = @id_tipo_servicio,
+           tipo_gasto          = @tipo_gasto,
+           tipo_servicio       = @tipo_servicio,
+           descripcion_detalle = @descripcion_detalle,
+           periodo_aplicacion  = @periodo_aplicacion,
+           es_cuota            = @es_cuota,
+           nro_cuota_actual    = @nro_cuota_actual,
+           total_cuotas        = @total_cuotas
+     WHERE id=@id;
+
+    PRINT 'DetalleExpensa modificado correctamente';
 END
 GO
---ELIMINAR DETALLE EXPENSA
-IF EXISTS (SELECT 1 FROM sys.procedures WHERE name='eliminarDetalleExpensa' AND SCHEMA_NAME(schema_id)='Procedimientos')
-  DROP PROCEDURE Procedimientos.eliminarDetalleExpensa;
+
+IF EXISTS (SELECT 1 FROM sys.procedures 
+           WHERE name='eliminarDetalleExpensa' AND SCHEMA_NAME(schema_id)='Procedimientos')
+    DROP PROCEDURE Procedimientos.eliminarDetalleExpensa;
 GO
 CREATE PROCEDURE Procedimientos.eliminarDetalleExpensa
-  @id INT
+    @id INT
 AS
 BEGIN
-  IF @id IS NULL BEGIN PRINT 'Error: id es obligatorio'; RETURN; END;
-  IF NOT EXISTS (SELECT 1 FROM Tabla.DetalleExpensa WHERE id=@id)
-  BEGIN PRINT 'Error: DetalleExpensa no encontrado'; RETURN; END;
+    IF @id IS NULL
+    BEGIN PRINT 'Error: id es obligatorio'; RETURN; END;
 
-  DELETE FROM Tabla.DetalleExpensa WHERE id=@id;
-  PRINT 'DetalleExpensa eliminado correctamente';
+    IF NOT EXISTS (SELECT 1 FROM Tabla.DetalleExpensa WHERE id=@id)
+    BEGIN PRINT 'Error: DetalleExpensa no encontrado'; RETURN; END;
+
+    DELETE FROM Tabla.DetalleExpensa WHERE id=@id;
+
+    PRINT 'DetalleExpensa eliminado correctamente';
 END
 GO
 
 --------------
 --SP FACTURA--
 --------------
---INSERTAR FACTURA
-IF EXISTS (SELECT 1 FROM sys.procedures WHERE name='insertarFactura' AND SCHEMA_NAME(schema_id)='Procedimientos')
-  DROP PROCEDURE Procedimientos.insertarFactura;
+IF EXISTS (SELECT 1 FROM sys.procedures 
+           WHERE name='insertarFactura' AND SCHEMA_NAME(schema_id)='Procedimientos')
+    DROP PROCEDURE Procedimientos.insertarFactura;
 GO
 CREATE PROCEDURE Procedimientos.insertarFactura
-  @id_proveedor      INT,
-  @id_detalleexpensa INT,
-  @nro               VARCHAR(30),
-  @fecha             DATE,
-  @importe           DECIMAL(12,2)
+    @id_proveedor      INT,
+    @id_detalleexpensa INT,
+    @nro               VARCHAR(30),
+    @fecha             DATE,
+    @importe           DECIMAL(12,2)
 AS
 BEGIN
-  IF @id_proveedor IS NULL OR @id_detalleexpensa IS NULL OR @nro IS NULL OR @fecha IS NULL OR @importe IS NULL
-  BEGIN PRINT 'Error: proveedor, detalle, nro, fecha e importe son obligatorios'; RETURN; END;
+    IF @id_proveedor IS NULL OR @id_detalleexpensa IS NULL OR
+       @nro IS NULL OR @fecha IS NULL OR @importe IS NULL
+    BEGIN PRINT 'Error: proveedor, detalle, nro, fecha e importe son obligatorios'; RETURN; END;
 
-  IF NOT EXISTS (SELECT 1 FROM Tabla.Proveedor WHERE id=@id_proveedor)
-  BEGIN PRINT 'Error: Proveedor no existe'; RETURN; END;
+    IF NOT EXISTS (SELECT 1 FROM Tabla.Proveedor WHERE id=@id_proveedor)
+    BEGIN PRINT 'Error: Proveedor no existe'; RETURN; END;
 
-  IF NOT EXISTS (SELECT 1 FROM Tabla.DetalleExpensa WHERE id=@id_detalleexpensa)
-  BEGIN PRINT 'Error: DetalleExpensa no existe'; RETURN; END;
+    IF NOT EXISTS (SELECT 1 FROM Tabla.DetalleExpensa WHERE id=@id_detalleexpensa)
+    BEGIN PRINT 'Error: DetalleExpensa no existe'; RETURN; END;
 
-  IF @importe < 0 BEGIN PRINT 'Error: importe no puede ser negativo'; RETURN; END;
+    IF @importe < 0
+    BEGIN PRINT 'Error: importe no puede ser negativo'; RETURN; END;
 
-  IF EXISTS (SELECT 1 FROM Tabla.Factura WHERE id_proveedor=@id_proveedor AND nro=@nro)
-  BEGIN PRINT 'Error: ya existe una factura con ese nro para el proveedor'; RETURN; END;
+    IF EXISTS (SELECT 1 FROM Tabla.Factura 
+               WHERE id_proveedor=@id_proveedor AND nro=@nro)
+    BEGIN PRINT 'Error: ya existe una factura con ese nro para el proveedor'; RETURN; END;
 
-  INSERT INTO Tabla.Factura(id_proveedor,id_detalleexpensa,nro,fecha,importe)
-  VALUES(@id_proveedor,@id_detalleexpensa,@nro,@fecha,@importe);
+    INSERT INTO Tabla.Factura (id_proveedor,id_detalleexpensa,nro,fecha,importe)
+    VALUES (@id_proveedor,@id_detalleexpensa,@nro,@fecha,@importe);
 
-  PRINT 'Factura insertada correctamente';
+    PRINT 'Factura insertada correctamente';
 END
 GO
---MODIFICAR FACTURA
-IF EXISTS (SELECT 1 FROM sys.procedures WHERE name='modificarFactura' AND SCHEMA_NAME(schema_id)='Procedimientos')
-  DROP PROCEDURE Procedimientos.modificarFactura;
+
+IF EXISTS (SELECT 1 FROM sys.procedures 
+           WHERE name='modificarFactura' AND SCHEMA_NAME(schema_id)='Procedimientos')
+    DROP PROCEDURE Procedimientos.modificarFactura;
 GO
 CREATE PROCEDURE Procedimientos.modificarFactura
-  @id                INT,
-  @id_proveedor      INT,
-  @id_detalleexpensa INT,
-  @nro               VARCHAR(30),
-  @fecha             DATE,
-  @importe           DECIMAL(12,2)
+    @id                INT,
+    @id_proveedor      INT,
+    @id_detalleexpensa INT,
+    @nro               VARCHAR(30),
+    @fecha             DATE,
+    @importe           DECIMAL(12,2)
 AS
 BEGIN
-  IF @id IS NULL BEGIN PRINT 'Error: id es obligatorio'; RETURN; END;
-  IF NOT EXISTS (SELECT 1 FROM Tabla.Factura WHERE id=@id)
-  BEGIN PRINT 'Error: Factura no encontrada'; RETURN; END;
+    IF @id IS NULL
+    BEGIN PRINT 'Error: id es obligatorio'; RETURN; END;
 
-  IF NOT EXISTS (SELECT 1 FROM Tabla.Proveedor WHERE id=@id_proveedor)
-  BEGIN PRINT 'Error: Proveedor no existe'; RETURN; END;
+    IF NOT EXISTS (SELECT 1 FROM Tabla.Factura WHERE id=@id)
+    BEGIN PRINT 'Error: Factura no encontrada'; RETURN; END;
 
-  IF NOT EXISTS (SELECT 1 FROM Tabla.DetalleExpensa WHERE id=@id_detalleexpensa)
-  BEGIN PRINT 'Error: DetalleExpensa no existe'; RETURN; END;
+    IF NOT EXISTS (SELECT 1 FROM Tabla.Proveedor WHERE id=@id_proveedor)
+    BEGIN PRINT 'Error: Proveedor no existe'; RETURN; END;
 
-  IF @importe < 0 BEGIN PRINT 'Error: importe no puede ser negativo'; RETURN; END;
+    IF NOT EXISTS (SELECT 1 FROM Tabla.DetalleExpensa WHERE id=@id_detalleexpensa)
+    BEGIN PRINT 'Error: DetalleExpensa no existe'; RETURN; END;
 
-  -- mantener unicidad proveedor+nro
-  IF EXISTS (SELECT 1 FROM Tabla.Factura WHERE id_proveedor=@id_proveedor AND nro=@nro AND id<>@id)
-  BEGIN PRINT 'Error: ya existe otra factura con ese nro para el proveedor'; RETURN; END;
+    IF @importe < 0
+    BEGIN PRINT 'Error: importe no puede ser negativo'; RETURN; END;
 
-  UPDATE Tabla.Factura
-  SET id_proveedor=@id_proveedor, id_detalleexpensa=@id_detalleexpensa,
-      nro=@nro, fecha=@fecha, importe=@importe
-  WHERE id=@id;
+    IF EXISTS (SELECT 1 FROM Tabla.Factura 
+               WHERE id_proveedor=@id_proveedor AND nro=@nro AND id<>@id)
+    BEGIN PRINT 'Error: ya existe otra factura con ese nro para el proveedor'; RETURN; END;
 
-  PRINT 'Factura modificada correctamente';
+    UPDATE Tabla.Factura
+       SET id_proveedor      = @id_proveedor,
+           id_detalleexpensa = @id_detalleexpensa,
+           nro               = @nro,
+           fecha             = @fecha,
+           importe           = @importe
+     WHERE id=@id;
+
+    PRINT 'Factura modificada correctamente';
 END
 GO
---ELIMINAR FACTURA
-IF EXISTS (SELECT 1 FROM sys.procedures WHERE name='eliminarFactura' AND SCHEMA_NAME(schema_id)='Procedimientos')
-  DROP PROCEDURE Procedimientos.eliminarFactura;
+
+IF EXISTS (SELECT 1 FROM sys.procedures 
+           WHERE name='eliminarFactura' AND SCHEMA_NAME(schema_id)='Procedimientos')
+    DROP PROCEDURE Procedimientos.eliminarFactura;
 GO
 CREATE PROCEDURE Procedimientos.eliminarFactura
-  @id INT
+    @id INT
 AS
 BEGIN
-  IF @id IS NULL BEGIN PRINT 'Error: id es obligatorio'; RETURN; END;
-  IF NOT EXISTS (SELECT 1 FROM Tabla.Factura WHERE id=@id)
-  BEGIN PRINT 'Error: Factura no encontrada'; RETURN; END;
+    IF @id IS NULL
+    BEGIN PRINT 'Error: id es obligatorio'; RETURN; END;
 
-  DELETE FROM Tabla.Factura WHERE id=@id;
-  PRINT 'Factura eliminada correctamente';
+    IF NOT EXISTS (SELECT 1 FROM Tabla.Factura WHERE id=@id)
+    BEGIN PRINT 'Error: Factura no encontrada'; RETURN; END;
+
+    DELETE FROM Tabla.Factura WHERE id=@id;
+
+    PRINT 'Factura eliminada correctamente';
+END
+GO
+-----------------
+--SP TIPO GASTO--
+-----------------
+IF EXISTS (SELECT 1 FROM sys.procedures 
+           WHERE name='insertarTipoGasto' AND SCHEMA_NAME(schema_id)='Procedimientos')
+    DROP PROCEDURE Procedimientos.insertarTipoGasto;
+GO
+CREATE PROCEDURE Procedimientos.insertarTipoGasto
+    @nombre              VARCHAR(50),
+    @descripcion_detalle VARCHAR(50) = NULL
+AS
+BEGIN
+
+    IF @nombre IS NULL
+    BEGIN
+        PRINT 'Error: nombre es obligatorio';
+        RETURN;
+    END;
+
+
+    IF EXISTS (SELECT 1 FROM Tabla.TipoGasto WHERE nombre = @nombre)
+    BEGIN
+        PRINT 'Error: ya existe un TipoGasto con ese nombre';
+        RETURN;
+    END;
+
+    INSERT INTO Tabla.TipoGasto (nombre, descripcion_detalle)
+    VALUES (@nombre, @descripcion_detalle);
+
+    PRINT 'TipoGasto insertado correctamente';
+END
+GO
+
+
+IF EXISTS (SELECT 1 FROM sys.procedures 
+           WHERE name='modificarTipoGasto' AND SCHEMA_NAME(schema_id)='Procedimientos')
+    DROP PROCEDURE Procedimientos.modificarTipoGasto;
+GO
+CREATE PROCEDURE Procedimientos.modificarTipoGasto
+    @id                  INT,
+    @nombre              VARCHAR(50),
+    @descripcion_detalle VARCHAR(50) = NULL
+AS
+BEGIN
+    IF @id IS NULL
+    BEGIN
+        PRINT 'Error: id es obligatorio';
+        RETURN;
+    END;
+
+    IF NOT EXISTS (SELECT 1 FROM Tabla.TipoGasto WHERE id = @id)
+    BEGIN
+        PRINT 'Error: TipoGasto no encontrado';
+        RETURN;
+    END;
+
+    IF @nombre IS NULL
+    BEGIN
+        PRINT 'Error: nombre es obligatorio';
+        RETURN;
+    END;
+
+    IF EXISTS (SELECT 1 FROM Tabla.TipoGasto 
+               WHERE nombre = @nombre AND id <> @id)
+    BEGIN
+        PRINT 'Error: ya existe otro TipoGasto con ese nombre';
+        RETURN;
+    END;
+
+    UPDATE Tabla.TipoGasto
+       SET nombre = @nombre,
+           descripcion_detalle = @descripcion_detalle
+     WHERE id = @id;
+
+    PRINT 'TipoGasto modificado correctamente';
+END
+GO
+
+
+IF EXISTS (SELECT 1 FROM sys.procedures 
+           WHERE name='eliminarTipoGasto' AND SCHEMA_NAME(schema_id)='Procedimientos')
+    DROP PROCEDURE Procedimientos.eliminarTipoGasto;
+GO
+CREATE PROCEDURE Procedimientos.eliminarTipoGasto
+    @id INT
+AS
+BEGIN
+    IF @id IS NULL
+    BEGIN
+        PRINT 'Error: id es obligatorio';
+        RETURN;
+    END;
+
+    IF NOT EXISTS (SELECT 1 FROM Tabla.TipoGasto WHERE id = @id)
+    BEGIN
+        PRINT 'Error: TipoGasto no encontrado';
+        RETURN;
+    END;
+
+
+    IF EXISTS (SELECT 1 FROM Tabla.DetalleExpensa WHERE id_tipo_gasto = @id)
+    BEGIN
+        PRINT 'Error: no se puede eliminar el TipoGasto porque está referenciado en DetalleExpensa';
+        RETURN;
+    END;
+
+    DELETE FROM Tabla.TipoGasto WHERE id = @id;
+
+    PRINT 'TipoGasto eliminado correctamente';
+END
+GO
+
+--------------------
+--SP TIPO SERVICIO--
+--------------------
+
+IF EXISTS (SELECT 1 FROM sys.procedures 
+           WHERE name='insertarTipoServicio' AND SCHEMA_NAME(schema_id)='Procedimientos')
+    DROP PROCEDURE Procedimientos.insertarTipoServicio;
+GO
+CREATE PROCEDURE Procedimientos.insertarTipoServicio
+    @nombre              VARCHAR(50),
+    @descripcion_detalle VARCHAR(50) = NULL
+AS
+BEGIN
+    IF @nombre IS NULL
+    BEGIN
+        PRINT 'Error: nombre es obligatorio';
+        RETURN;
+    END;
+
+    IF EXISTS (SELECT 1 FROM Tabla.TipoServicio WHERE nombre = @nombre)
+    BEGIN
+        PRINT 'Error: ya existe un TipoServicio con ese nombre';
+        RETURN;
+    END;
+
+    INSERT INTO Tabla.TipoServicio (nombre, descripcion_detalle)
+    VALUES (@nombre, @descripcion_detalle);
+
+    PRINT 'TipoServicio insertado correctamente';
+END
+GO
+
+
+IF EXISTS (SELECT 1 FROM sys.procedures 
+           WHERE name='modificarTipoServicio' AND SCHEMA_NAME(schema_id)='Procedimientos')
+    DROP PROCEDURE Procedimientos.modificarTipoServicio;
+GO
+CREATE PROCEDURE Procedimientos.modificarTipoServicio
+    @id                  INT,
+    @nombre              VARCHAR(50),
+    @descripcion_detalle VARCHAR(50) = NULL
+AS
+BEGIN
+    IF @id IS NULL
+    BEGIN
+        PRINT 'Error: id es obligatorio';
+        RETURN;
+    END;
+
+    IF NOT EXISTS (SELECT 1 FROM Tabla.TipoServicio WHERE id = @id)
+    BEGIN
+        PRINT 'Error: TipoServicio no encontrado';
+        RETURN;
+    END;
+
+    IF @nombre IS NULL
+    BEGIN
+        PRINT 'Error: nombre es obligatorio';
+        RETURN;
+    END;
+
+    IF EXISTS (SELECT 1 FROM Tabla.TipoServicio 
+               WHERE nombre = @nombre AND id <> @id)
+    BEGIN
+        PRINT 'Error: ya existe otro TipoServicio con ese nombre';
+        RETURN;
+    END;
+
+    UPDATE Tabla.TipoServicio
+       SET nombre = @nombre,
+           descripcion_detalle = @descripcion_detalle
+     WHERE id = @id;
+
+    PRINT 'TipoServicio modificado correctamente';
+END
+GO
+
+
+IF EXISTS (SELECT 1 FROM sys.procedures 
+           WHERE name='eliminarTipoServicio' AND SCHEMA_NAME(schema_id)='Procedimientos')
+    DROP PROCEDURE Procedimientos.eliminarTipoServicio;
+GO
+CREATE PROCEDURE Procedimientos.eliminarTipoServicio
+    @id INT
+AS
+BEGIN
+    IF @id IS NULL
+    BEGIN
+        PRINT 'Error: id es obligatorio';
+        RETURN;
+    END;
+
+    IF NOT EXISTS (SELECT 1 FROM Tabla.TipoServicio WHERE id = @id)
+    BEGIN
+        PRINT 'Error: TipoServicio no encontrado';
+        RETURN;
+    END;
+
+  
+    IF EXISTS (SELECT 1 FROM Tabla.DetalleExpensa WHERE id_tipo_servicio = @id)
+    BEGIN
+        PRINT 'Error: no se puede eliminar el TipoServicio porque está referenciado en DetalleExpensa';
+        RETURN;
+    END;
+
+    DELETE FROM Tabla.TipoServicio WHERE id = @id;
+
+    PRINT 'TipoServicio eliminado correctamente';
 END
 GO
